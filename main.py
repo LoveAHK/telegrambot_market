@@ -12,6 +12,7 @@ import pymysql
 from core import get_all_items
 import market_admin
 
+
 bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
 
 def delete_category(message):
@@ -46,8 +47,9 @@ def delete_category_confirmation(call):
     cur = con.cursor()
 
     # Delete the category and all products in it
-    cur.execute(f"DELETE FROM categories WHERE id={category_id}")
     cur.execute(f"DELETE FROM market WHERE category_id={category_id}")
+    cur.execute(f"DELETE FROM categories WHERE id={category_id}")
+    
     con.commit()
 
     # Get updated list of categories
@@ -150,7 +152,10 @@ def view_products(message):
     # Get categories
     cur.execute("SELECT id, name FROM categories")
     categories = cur.fetchall()
-
+    messagetext1 = f"""
+         🗃 Выберите Категорию:
+➖➖➖➖➖➖➖➖➖➖
+    """
     if categories:
         # Create inline keyboard with categories
         keyboard = telebot.types.InlineKeyboardMarkup()
@@ -158,7 +163,7 @@ def view_products(message):
             keyboard.add(telebot.types.InlineKeyboardButton(text=category[1], callback_data=f"category_{category[0]}"))
 
         # Send message with categories
-        bot.send_message(message.chat.id, "Выберите категорию:", reply_markup=keyboard)
+        bot.send_message(message.chat.id, text=messagetext1, reply_markup=keyboard)
     else:
         # If there are no categories, send error message
         bot.send_message(message.chat.id, "К сожалению, нет категорий для отображения.")
@@ -179,7 +184,10 @@ def view_category_products(call):
     # Get products in selected category
     cur.execute("SELECT id, name_tovar, price, kolvo, file_id, file_name, type FROM market WHERE category_id=%s", category_id)
     products = cur.fetchall()
-
+    messagetext = f"""
+    <b>🎁 Выберите товар:</b>
+➖➖➖➖➖➖➖➖➖➖
+    """
     if products:
         # Create inline keyboard with products
         keyboard = telebot.types.InlineKeyboardMarkup()
@@ -190,7 +198,7 @@ def view_category_products(call):
         keyboard.add(telebot.types.InlineKeyboardButton(text="Назад", callback_data="back_to_categories"))
 
         # Send message with products and store category id in callback data
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберите товар:", reply_markup=keyboard, parse_mode="HTML")
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=messagetext, reply_markup=keyboard, parse_mode="HTML")
     else:
         # If there are no products in selected category, send error message
         bot.answer_callback_query(callback_query_id=call.id, text="К сожалению, в этой категории нет товаров.")
@@ -211,12 +219,26 @@ def view_product(call):
     product_id, category_id = map(int, call.data.split("_")[1:])
 
     # Get product information
-    cur.execute("SELECT name_tovar, price, kolvo, file_id, file_name, type FROM market WHERE id=%s", product_id)
+    cur.execute("""
+        SELECT m.name_tovar, m.price, m.kolvo, m.file_id, m.file_name, m.type, m.opisanie, c.name
+        FROM market m
+        JOIN categories c ON m.category_id = c.id
+        WHERE m.id = %s
+    """, product_id)
     product = cur.fetchone()
 
     if product:
         # Create message with product information
-        message = f"Название товара: {product[0]}\nЦена: {product[1]} руб.\nКоличество на складе: {product[2]}"
+        message =f"""
+        <b>🎁 Информация о товаре:</b>
+➖➖➖➖➖➖➖➖➖➖
+🏷 Название: <code>{product[0]}</code>
+🗃 Категория: <code>{product[7]}</code>
+💰 Стоимость: <code>{product[1]}₽</code>
+📦 Количество: <code>{product[2]}шт</code>
+📃 Описание: <b>{product[6]}</b>
+        """
+        # message = f"Название товара: {product[0]}\nЦена: {product[1]} руб.\nКоличество на складе: {product[2]}"
 
         # Create inline keyboard with download button and back button
         keyboard = telebot.types.InlineKeyboardMarkup()
@@ -308,16 +330,22 @@ def add_tovar_kolvo(message, name_tovar, category_id):
         bot.send_message(chat_id, '🚫 Некорректная цена. Попробуйте еще раз.')
         return
     bot.send_message(chat_id, 'Введите количество товара:')
-    bot.register_next_step_handler(message, add_tovar_file, name_tovar, price, category_id)
+    bot.register_next_step_handler(message, add_tovar_description, name_tovar, price, category_id)
 
-def add_tovar_file(message, name_tovar, price, category_id):
+def add_tovar_description(message, name_tovar, price, category_id):
     chat_id = message.chat.id
     kolvo = message.text.strip()
-    bot.send_message(chat_id, 'Прикрепите файл товара', reply_markup=markup.markup_cancel())
-    bot.register_next_step_handler(message, add_tovar_confirm, name_tovar, price, kolvo, category_id)
+    bot.send_message(chat_id, 'Введите Описание товара:')
+    bot.register_next_step_handler(message, add_tovar_file, name_tovar, price, category_id, kolvo)
+
+def add_tovar_file(message, name_tovar, price, category_id, kolvo):
+    chat_id = message.chat.id
+    opisanie = message.text.strip()
+    bot.send_message(chat_id, 'Прикрепите файл товара:')
+    bot.register_next_step_handler(message, add_tovar_confirm, name_tovar, price, category_id, kolvo, opisanie)
 
 
-def add_tovar_confirm(message, name_tovar, price, kolvo, category_id):
+def add_tovar_confirm(message,  name_tovar, price, category_id, kolvo, opisanie):
     chat_id = message.chat.id
     if message.text is not None and (otmena := message.text.strip()) == 'Отмена':
         bot.send_message(message.chat.id, 'Отменено.', reply_markup=markup.markup_admin())
@@ -331,7 +359,7 @@ def add_tovar_confirm(message, name_tovar, price, kolvo, category_id):
             host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
         cur = con.cursor()
         cur.execute(
-            f"INSERT INTO market (`name_tovar`, `price`, `kolvo`, `file_id`, `file_name`, `type`, `category_id`) VALUES ('{name_tovar}', '{price}', '{kolvo}', '{file_id}', '{file_name}', '{file_type}', '{category_id}')")
+            f"INSERT INTO market (`name_tovar`, `price`, `kolvo`, `file_id`, `file_name`, `type`, `opisanie`, `category_id`) VALUES ('{name_tovar}', '{price}', '{kolvo}', '{file_id}', '{file_name}', '{file_type}', '{opisanie}', '{category_id}')")
         con.commit()
         cur.close()
         con.close()
@@ -341,7 +369,7 @@ def add_tovar_confirm(message, name_tovar, price, kolvo, category_id):
         bot.send_message(
             chat_id, '❌ Не удалось получить файл. Попробуйте еще раз.')
         bot.register_next_step_handler(
-            message, add_tovar_confirm, name_tovar, price, kolvo)
+            message, add_tovar_confirm,  name_tovar, price, category_id, kolvo, opisanie)
     return
 
 
