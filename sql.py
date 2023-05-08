@@ -27,7 +27,7 @@ def create_table_market():
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
     cur = con.cursor()
     
-    cur.execute("CREATE TABLE IF NOT EXISTS market(id INT NOT NULL AUTO_INCREMENT, name_tovar VARCHAR(255), price DECIMAL(10, 2), kolvo INT, `file_id` VARCHAR(250), `file_name` VARCHAR(2048), `type` VARCHAR(20), `opisanie` VARCHAR(250), category_id INT, PRIMARY KEY (id), FOREIGN KEY (category_id) REFERENCES categories(id))")
+    cur.execute("CREATE TABLE IF NOT EXISTS market(id INT NOT NULL AUTO_INCREMENT, name_tovar VARCHAR(255), price DECIMAL(10, 2), kolvo INT, `file_id` VARCHAR(250), `file_name` VARCHAR(2048), `type` VARCHAR(20), `opisanie` VARCHAR(250), `photo` VARCHAR(250), category_id INT, PRIMARY KEY (id), FOREIGN KEY (category_id) REFERENCES categories(id))")
     cur.execute(f"ALTER TABLE market CONVERT TO CHARACTER SET utf8mb4")
 
     cur.close()
