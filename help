@@ -1,0 +1,5 @@
+CREATE USER 'admin'@'localhost' IDENTIFIED BY '9635';
+GRANT ALL PRIVILEGES ON support_db.* TO 'admin'@'localhost';
+FLUSH PRIVILEGES;
+use support_db;
+select * from files
