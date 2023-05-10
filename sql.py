@@ -1,6 +1,22 @@
 import config
 import pymysql
 
+def create_table_profile():
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS profile(
+            id INT NOT NULL AUTO_INCREMENT,
+            user_id INT NOT NULL,
+            balance FLOAT NOT NULL DEFAULT 0,
+            purchased_items INT NOT NULL DEFAULT 0,
+            PRIMARY KEY (id)
+        )
+    """)
+    cur.execute(f"ALTER TABLE profile CONVERT TO CHARACTER SET utf8mb4")
+    cur.close()
+    con.close()
 
 def create_table_agents():
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
@@ -86,4 +102,5 @@ create_table_categories()
 create_table_market()
 create_table_requests()
 create_table_messages()
+create_table_profile()
 print("База данных успешно создана")

@@ -11,9 +11,98 @@ from PIL import Image
 import pymysql
 from core import get_all_items
 import market_admin
-
+from telebot.types import LabeledPrice
 
 bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
+
+def popolnenie_balance(message):
+    # Запрос ID пользователя
+    bot.send_message(message.chat.id, 'Введите сумму пополнения:')
+    bot.register_next_step_handler(message, popolnenie_form)
+
+
+
+def popolnenie_form(message):
+    user_id = message.from_user.id
+    summ = message.text.strip()
+    description = f"Пополнение баланса на сумму {summ} рублей\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nДля пользователя с ID: {user_id}"
+
+    prices = [LabeledPrice(label='Пополнение баланса', amount=int(summ)*100)]
+    if config.PAYMENTS_TOKEN.split(':')[1] == 'TEST':
+        bot.send_invoice(
+                            message.chat.id,  #chat_id
+                            title = 'Пополнение баланса', #title
+                            description = description,
+                            invoice_payload = 'HAPPY FRIDAYS COUPON', #invoice_payload
+                            provider_token = config.PAYMENTS_TOKEN, #provider_token
+                            currency = 'rub', #currency
+                            prices = prices, #prices
+                            photo_url='https://www.the.willk.in/pictures/logo-mir.png',
+                            photo_height=380,
+                            photo_width=760,
+                            photo_size=760,
+                            is_flexible=False,
+                            start_parameter='my-bot-example')
+
+
+@bot.pre_checkout_query_handler(func=lambda query: True)
+def checkout(pre_checkout_query):
+    bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True,
+                                  error_message="Aliens tried to steal your card's CVV, but we successfully protected your credentials,"
+                                                " try to pay again in a few minutes, we need a small rest.")
+
+@bot.message_handler(content_types=['successful_payment'])
+def got_payment(message):
+    core.update_balance(user_id=message.from_user.id,  amount=message.successful_payment.total_amount // 100)
+    bot.send_message(message.chat.id,
+                     f"Платеж на сумму {message.successful_payment.total_amount // 100} {message.successful_payment.currency} прошел успешно!!!" , reply_markup=markup.markup_main())
+
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'give_rub')
+def handle_give_balance_callback(call):
+    # Запрос ID пользователя
+    bot.send_message(call.message.chat.id, 'Введите ID пользователя:')
+    bot.register_next_step_handler(call.message, handle_give_balance_user_id)
+
+def handle_give_balance_user_id(message):
+    # Получение ID пользователя из сообщения
+    user_id = message.text.strip()
+    if core.profile_exists(user_id):
+        user_id = int(user_id)
+    else:
+        bot.send_message(message.chat.id, 'Ошибка. Некорректный ID пользователя.')
+        return 
+    # Запрос суммы
+    bot.send_message(message.chat.id, 'Введите сумму для выдачи:')
+    bot.register_next_step_handler(message, handle_give_balance_amount, user_id)
+
+def handle_give_balance_amount(message, user_id):
+    # Получение суммы из сообщения
+    amount = message.text.strip()
+    try:
+        amount = float(amount)
+    except ValueError:
+        bot.send_message(message.chat.id, 'Ошибка. Некорректная сумма.')
+        return
+    success = core.update_balance(user_id, amount)
+    if success:
+        bot.send_message(message.chat.id, f"🎉 <b>Баланс успешно выдан.</b>\n👤 ID пользователя: <code>{user_id}</code>\n💰 Текущий баланс: <code>{core.get_balance(user_id)}₽</code>", parse_mode="HTML")
+    else:
+        bot.send_message(message.chat.id, 'Ошибка при обновлении баланса.')
+
+
+def send_profile(message):
+    user_id = message.from_user.id
+    data = core.user_profile(user_id)
+    message_data = f"""
+<b>📇 | Мой профиль:</b>
+👤 | Мой ID:: <code>{data[1]}</code>
+💸 | Баланс: <code>{data[2]}₽</code>
+🛒 | Куплено товаров: <code>{data[3]}</code>
+"""
+    bot.send_message(message.chat.id, text=message_data, parse_mode="HTML")
 
 def delete_category(message):
     # Connect to the database
@@ -381,7 +470,14 @@ def add_tovar_confirm(message,  name_tovar, price, category_id, kolvo, opisanie,
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, '👋🏻 Привет! Это бот для технической поддержки пользователей.\nЕсли у тебя есть какой-либо вопрос или проблема - нажми на кнопку <b>Написать запрос</b> и наши сотрудники в скором времени тебе ответят!', parse_mode='html', reply_markup=markup.markup_main())
+    user_id = message.from_user.id
+
+    if not core.profile_exists(user_id):
+        core.create_profile(user_id)
+        bot.send_message(message.chat.id, '👋🏻 Привет! Это бот для технической поддержки пользователей.\nЕсли у тебя есть какой-либо вопрос или проблема - нажми на кнопку <b>Написать запрос</b> и наши сотрудники в скором времени тебе ответят!', parse_mode='html')
+        bot.send_message(message.chat.id, 'Ваш профиль успешно создан. Чтобы его посмотреть нажмите на кнопку 👤 Мой профиль', reply_markup=markup.markup_main())
+    else:
+        bot.send_message(message.chat.id, '👋🏻 Привет! Это бот для технической поддержки пользователей.\nЕсли у тебя есть какой-либо вопрос или проблема - нажми на кнопку <b>Написать запрос</b> и наши сотрудники в скором времени тебе ответят!', parse_mode='html', reply_markup=markup.markup_main())
 
 @bot.message_handler(commands=['agent'])
 def agent(message):
@@ -441,6 +537,10 @@ def send_text(message):
         delete_category(message)
     elif message.text == '🔙 Главное меню':
         admin(message)
+    elif message.text == '👤 Мой профиль':
+        send_profile(message)
+    elif message.text == '💰 Пополнить баланс':
+        popolnenie_balance(message)
     else:
         bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html', reply_markup=markup.markup_main())
 

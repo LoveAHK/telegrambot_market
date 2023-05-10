@@ -6,6 +6,64 @@ from telebot import types
 
 
 
+
+def get_balance(user_id):
+        con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+        cur = con.cursor()
+        cur.execute("SELECT balance FROM profile WHERE user_id = %s", (user_id,))
+        balance = cur.fetchone()
+        cur.close()
+        con.close()
+        return balance[0]
+
+def update_balance(user_id, amount):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    try:
+        # Проверка существования профиля пользователя
+        if not profile_exists(user_id):
+            return False
+        cur.execute("SELECT balance FROM profile WHERE user_id = %s", (user_id,))
+        current_balance = cur.fetchone()[0]
+        new_balance = current_balance + amount
+        cur.execute("UPDATE profile SET balance = %s WHERE user_id = %s", (new_balance, user_id))
+        con.commit()
+        return True
+    except Exception as e:
+        print(f"Ошибка при обновлении баланса: {e}")
+        return False
+    finally:
+        cur.close()
+        con.close()
+
+    
+def create_profile(user_id):
+    # Запись данных в таблицу profile
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("INSERT INTO profile (user_id, balance, purchased_items) VALUES (%s, %s, %s)", (user_id, 0, 0))
+    con.commit()
+    cur.close()
+    con.close()
+
+def profile_exists(user_id):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("SELECT COUNT(*) FROM profile WHERE user_id = %s", (user_id,))
+    count = cur.fetchone()[0]
+    cur.close()
+    con.close()
+    return count > 0
+
+def user_profile(user_id):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("SELECT * FROM profile WHERE user_id = %s", (user_id,))
+    profile_data = cur.fetchone()
+    cur.close()
+    con.close()
+    return profile_data
+
 def get_categories():
     # Connect to the database
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])

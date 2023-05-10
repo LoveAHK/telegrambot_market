@@ -33,7 +33,12 @@ def markup_main():
     markup_main = types.ReplyKeyboardMarkup(resize_keyboard=True)
     item1 = types.KeyboardButton("✏️ Написать запрос")
     item2 = types.KeyboardButton("✉️ Мои запросы")
+    item3 = types.KeyboardButton("👤 Мой профиль")
+    item4 = types.KeyboardButton("🎁 Купить товары")
+    item5 = types.KeyboardButton("💰 Пополнить баланс")
     markup_main.row(item1, item2)
+    markup_main.row(item3, item4)
+    markup_main.row(item5)
     return markup_main
 
 def markup_agent():
@@ -57,10 +62,11 @@ def markup_admin():
     item2 = types.InlineKeyboardButton("🧑‍💻 Агенты поддержки", callback_data='all_agents:1')
     item3 = types.InlineKeyboardButton("🔑 Одноразовые пароли", callback_data='all_passwords:1')
     item4 = types.InlineKeyboardButton("🎲 Сгенерировать одноразовые пароли", callback_data='generate_passwords')
-    item5 = types.InlineKeyboardButton("⛔️ Выключить бота", callback_data='stop_bot:wait')
+    item5 = types.InlineKeyboardButton("💶 Выдать баланс", callback_data='give_rub')
     item6 = types.InlineKeyboardButton("⚙️ Управление маркетом", callback_data='market_admin')
     item7 = types.InlineKeyboardButton("Сделать бэкап базы данных", callback_data='give_backup')
-    markup_admin.add(item1, item2, item3, item4, item5, item6, item7)
+    item8 = types.InlineKeyboardButton("⛔️ Выключить бота", callback_data='stop_bot:wait')
+    markup_admin.add(item1, item2, item3, item4, item5, item6, item7, item8)
     return markup_admin
 
 def markup_tovars_admin():
