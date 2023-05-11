@@ -1,6 +1,32 @@
 import config
 import pymysql
 
+def create_table_check():
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS receipt(
+            id INT NOT NULL AUTO_INCREMENT, 
+            name_tovar VARCHAR(255), 
+            price DECIMAL(10, 2), 
+            file_id VARCHAR(250), 
+            file_name VARCHAR(2048), 
+            type VARCHAR(20), 
+            opisanie VARCHAR(250), 
+            receipt_number VARCHAR(50), 
+            user_id INT, 
+            buy_date VARCHAR(250),
+            PRIMARY KEY (id)
+        )
+    """)
+    
+    cur.execute(f"ALTER TABLE receipt CONVERT TO CHARACTER SET utf8mb4")
+
+    cur.close()
+    con.close()
+
+
 def create_table_profile():
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
     cur = con.cursor()
@@ -103,4 +129,5 @@ create_table_market()
 create_table_requests()
 create_table_messages()
 create_table_profile()
+create_table_check()
 print("База данных успешно создана")

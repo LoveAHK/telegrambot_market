@@ -63,9 +63,10 @@ def markup_admin():
     item3 = types.InlineKeyboardButton("🔑 Одноразовые пароли", callback_data='all_passwords:1')
     item4 = types.InlineKeyboardButton("🎲 Сгенерировать одноразовые пароли", callback_data='generate_passwords')
     item5 = types.InlineKeyboardButton("💶 Выдать баланс", callback_data='give_rub')
-    item6 = types.InlineKeyboardButton("⚙️ Управление маркетом", callback_data='market_admin')
-    item7 = types.InlineKeyboardButton("Сделать бэкап базы данных", callback_data='give_backup')
-    item8 = types.InlineKeyboardButton("⛔️ Выключить бота", callback_data='stop_bot:wait')
+    item6 = types.InlineKeyboardButton("🧾 Найти чек", callback_data='find_check')
+    item7 = types.InlineKeyboardButton("⚙️ Управление маркетом", callback_data='market_admin')
+    item8 = types.InlineKeyboardButton("Сделать бэкап базы данных", callback_data='give_backup')
+    item9 = types.InlineKeyboardButton("⛔️ Выключить бота", callback_data='stop_bot:wait')
     markup_admin.add(item1, item2, item3, item4, item5, item6, item7, item8)
     return markup_admin
 

@@ -15,12 +15,50 @@ from telebot.types import LabeledPrice
 
 bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
 
+@bot.callback_query_handler(func=lambda call: call.data == 'find_check')
+def find_receipt_number(call):
+    # Запрос ID пользователя
+    bot.send_message(call.message.chat.id, 'Введите номер чека:')
+    bot.register_next_step_handler(call.message, find_receipt)
+
+def find_receipt(message):
+    # Получение номера чека, введенного администратором
+    receipt_number = message.text.split()
+    result = core.find_recept(receipt_number)
+    if result:
+        name_tovar = result[1]
+        price = result[2]
+        file_id = result[3]
+        opisanie = result[6]
+        receipt_number = result[7]
+        user_id = result[8]
+        buy_date = result[9]
+
+        # Формирование сообщения с информацией о чеке
+        message_check = f"""
+        🧾 Чек: <code>{receipt_number}</code>
+➖➖➖➖➖➖➖➖➖➖
+👤 Покупатель: <b>{user_id}</b>
+🎁 Товар: <b>{name_tovar}</b>
+📦 Количество: <code>1 шт</code>
+💰 Стоимость: <code>{price}₽</code>
+📃 Описание: <b>{opisanie}</b>
+🕰 Дата покупки: <code>{str(buy_date)}</code>
+        """
+
+        # Отправка сообщения с информацией о чеке и кнопкой для скачивания файла
+        bot.send_message(message.chat.id, message_check, parse_mode="HTML")
+        bot.send_document(message.chat.id, file_id)
+
+    else:
+        # Чек не найден
+        bot.send_message(message.chat.id, "Чек с указанным номером не найден.")
+
+
 def popolnenie_balance(message):
     # Запрос ID пользователя
     bot.send_message(message.chat.id, 'Введите сумму пополнения:')
     bot.register_next_step_handler(message, popolnenie_form)
-
-
 
 def popolnenie_form(message):
     user_id = message.from_user.id
@@ -48,8 +86,8 @@ def popolnenie_form(message):
 @bot.pre_checkout_query_handler(func=lambda query: True)
 def checkout(pre_checkout_query):
     bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True,
-                                  error_message="Aliens tried to steal your card's CVV, but we successfully protected your credentials,"
-                                                " try to pay again in a few minutes, we need a small rest.")
+                                  error_message="Что-то пошло не так,"
+                                                " попробуйте повторить оплату через пару минут.")
 
 @bot.message_handler(content_types=['successful_payment'])
 def got_payment(message):
@@ -330,14 +368,90 @@ def view_product(call):
         
         # Create inline keyboard with download button and back button
         keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text="Скачать файл", callback_data=f"open_file_{product_id}"))
+        user_id = call.from_user.id
+        if str(user_id) == config.ADMIN_ID:
+            keyboard.add(telebot.types.InlineKeyboardButton(text="Скачать файл", callback_data=f"open_file_{product_id}"))
+        else:
+            keyboard.add(telebot.types.InlineKeyboardButton(text="Купить товар", callback_data=f"buy_file_{product_id}"))
         chat_id = call.message.chat.id
-        # Edit message with product information and inline keyboard
         bot.send_photo(chat_id,  product[7], caption=message, reply_markup=keyboard, parse_mode="HTML")
-        # bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=message, reply_markup=keyboard, parse_mode="HTML")
 
     cur.close()
     con.close()
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("buy_file_"))
+def send_file_user(call):
+    user_id = call.from_user.id
+    product_id = int(call.data.split("_")[2])
+
+    # Get file information from the database
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("SELECT file_id, file_name, price, kolvo, type, opisanie, name_tovar FROM market WHERE id=%s", product_id)
+    result = cur.fetchone()
+
+    if result:
+        file_id = result[0]
+        file_name = result[1]
+        price = result[2]
+        kolvo = result[3]
+        typetovar = result[4]
+        opisanie = result[5]
+        name_tovar = result[6]
+
+        # Check user balance and compare with price
+        balance_user = core.get_balance(user_id)
+        if float(balance_user) >= float(price):
+            # Deduct the price from the user's balance
+            
+
+            # Update the quantity of the product
+            if kolvo > 0:
+                kolvo -= 1
+                cur.execute("UPDATE market SET kolvo = %s WHERE id = %s", (kolvo, product_id))
+                con.commit()
+
+                # Send the file to the chat
+                bot.send_document(call.message.chat.id, file_id, caption=file_name)
+
+                # Generate receipt number
+                receipt_number = market_admin.generate_receipt_number()
+                buy_date = market_admin.get_date()
+                # Insert receipt into the database
+                cur.execute("INSERT INTO receipt (name_tovar, price, file_id, file_name, type, opisanie, receipt_number, user_id, buy_date) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                            (name_tovar, price, file_id, file_name, typetovar, opisanie, receipt_number, user_id, buy_date))
+                con.commit()
+                
+                # Send confirmation message with receipt
+                message_check = f"""
+                        <b>✅ Вы успешно купили товар</b>
+➖➖➖➖➖➖➖➖➖➖
+🧾 Чек: <code>{receipt_number}</code>
+👤 Покупатель: <b>{user_id}</b>
+🎁 Товар: <b>{name_tovar}</b>
+📦 Колличество: <code>1 шт</code>
+💰 Стоимость: <code>{price}₽</code>
+📃 Описание: <b>{opisanie}</b>
+🕰 Дата покупки: <code> {str(buy_date)}</code>
+                    """
+                bot.send_message(call.message.chat.id, message_check, parse_mode="HTML")
+                core.update_balance(user_id, -float(price))
+                core.update_purchase_count_user(user_id)
+            else:
+                # Product is out of stock
+                bot.send_message(call.message.chat.id, "Извините, этот товар закончился.")
+        else:
+            # Insufficient balance, send error message
+            bot.send_message(call.message.chat.id, "У вас недостаточно средств для покупки этого товара.")
+    else:
+        # Product not found in the database, send error message
+        bot.send_message(call.message.chat.id, "Товар не найден.")
+
+    cur.close()
+    con.close()
+
+
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("open_file_"))
@@ -541,6 +655,8 @@ def send_text(message):
         send_profile(message)
     elif message.text == '💰 Пополнить баланс':
         popolnenie_balance(message)
+    elif message.text == '🎁 Купить товары':
+        view_products(message)
     else:
         bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html', reply_markup=markup.markup_main())
 

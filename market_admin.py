@@ -1,17 +1,21 @@
 from main import get_all_items, types, bot
-import markup
 import core
-import pymysql
-import config
 
-# def tovars(message):
-#     # Получение всех товаров из базы данных
-#     items = get_all_items()
-#     markups = types.InlineKeyboardMarkup(row_width=1)
-#     for item in items:
-#         button = types.InlineKeyboardButton(text=item[1], callback_data=f"view_item_{item[0]}")
-#         markups.add(button)
-#     bot.send_message(chat_id=message.chat.id, text='Выберете товар', reply_markup=markups, reply_to_message_id=message.id)
+
+import random
+import string
+
+import time
+from datetime import datetime
+
+def get_date():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def generate_receipt_number():
+    length = 8  # Длина номера чека
+    letters_and_digits = string.ascii_letters + string.digits
+    return ''.join(random.choice(letters_and_digits) for _ in range(length))
+
 
 def get_backup(message):
     # Вызов функции для бэкапа базы данных

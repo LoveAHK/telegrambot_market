@@ -4,8 +4,37 @@ import random
 import pymysql
 from telebot import types
 
+def update_purchase_count_user(user_id):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    try:
+        # Проверка существования профиля пользователя
+        if not profile_exists(user_id):
+            return False
+        # Получение текущего значения покупок пользователя
+        cur.execute("SELECT purchased_items FROM profile WHERE user_id = %s", (user_id,))
+        current_purchases = cur.fetchone()[0]
+        new_purchases = current_purchases + 1
+        # Обновление значения покупок в профиле пользователя
+        cur.execute("UPDATE profile SET purchased_items = %s WHERE user_id = %s", (new_purchases, user_id))
+        con.commit()
 
+        return True
+    except Exception as e:
+        print(f"Ошибка при обновлении значения покупок: {e}")
+        return False
+    finally:
+        cur.close()
+        con.close()
 
+def find_recept(receipt_number):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("SELECT * FROM receipt WHERE receipt_number = %s", (receipt_number,))
+    result = cur.fetchone()
+    cur.close()
+    con.close()
+    return result
 
 def get_balance(user_id):
         con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
