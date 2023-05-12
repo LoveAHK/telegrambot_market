@@ -4,6 +4,43 @@ import random
 import pymysql
 from telebot import types
 
+
+def get_receipt_info(user_id, receipt_item):
+    # Подключение к базе данных и выполнение запроса
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("SELECT receipt_number, user_id, name_tovar, price, opisanie, buy_date, file_id, file_name FROM receipt WHERE user_id = %s AND name_tovar = %s", (user_id, receipt_item))
+
+    # Получение результатов запроса
+    result = cur.fetchone()
+
+    cur.close()
+    con.close()
+
+    return result
+
+
+
+def get_purchased_items(user_id):
+    # Подключение к базе данных и выполнение запроса
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("SELECT DISTINCT name_tovar FROM receipt WHERE user_id = %s", user_id)
+
+    # Получение результатов запроса
+    results = cur.fetchall()
+
+    # Формирование списка имен товаров
+    purchased_items = [row[0] for row in results]
+
+    cur.close()
+    con.close()
+
+    return purchased_items
+
+
+
+
 def update_purchase_count_user(user_id):
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
     cur = con.cursor()

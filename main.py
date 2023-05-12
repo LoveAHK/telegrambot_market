@@ -15,6 +15,229 @@ from telebot.types import LabeledPrice
 
 bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
 
+def edit_products(message):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+
+    # Get categories
+    cur.execute("SELECT id, name FROM categories")
+    categories = cur.fetchall()
+    messagetext1 = f"""
+        <b>🗃 Выберите Категорию:</b>
+➖➖➖➖➖➖➖➖➖➖
+    """
+    if categories:
+        # Create inline keyboard with categories
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        for category in categories:
+            keyboard.add(telebot.types.InlineKeyboardButton(text=category[1], callback_data=f"categoryedit_{category[0]}"))
+
+        # Send message with categories
+        bot.send_message(message.chat.id, text=messagetext1, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        # If there are no categories, send error message
+        bot.send_message(message.chat.id, "К сожалению, нет категорий для отображения.")
+
+    cur.close()
+    con.close()
+
+
+# Callback function for category selection
+@bot.callback_query_handler(func=lambda call: call.data.startswith("categoryedit_"))
+def view_category_products_edit(call):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+
+    # Get category id from callback data
+    category_id = int(call.data.split("_")[1])
+
+    # Get products in selected category
+    cur.execute("SELECT id, name_tovar, price, kolvo, file_id, file_name, type FROM market WHERE category_id=%s", category_id)
+    products = cur.fetchall()
+    messagetext = f"""
+    <b>🎁 Выберите товар:</b>
+➖➖➖➖➖➖➖➖➖➖
+    """
+    if products:
+        # Create inline keyboard with products
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        for product in products:
+            keyboard.add(telebot.types.InlineKeyboardButton(text=product[1], callback_data=f"productedit_{product[0]}_{category_id}"))
+
+        # Add "Назад" button to return to categories selection
+        keyboard.add(telebot.types.InlineKeyboardButton(text="Назад", callback_data="back_to_categories_edit"))
+
+        # Send message with products and store category id in callback data
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=messagetext, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        # If there are no products in selected category, send error message
+        bot.answer_callback_query(callback_query_id=call.id, text="К сожалению, в этой категории нет товаров.")
+
+    cur.close()
+    con.close()
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_categories_edit")
+def back_to_categories_edit(call):
+    edit_products(call.message)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("productedit_"))
+def view_product_edit(call):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+
+    # Get product id and category id from callback data
+    product_id, category_id = map(int, call.data.split("_")[1:])
+
+    # Get product information
+    cur.execute("""
+        SELECT m.name_tovar, m.price, m.kolvo, m.file_id, m.file_name, m.type, m.opisanie, m.photo, c.name
+        FROM market m
+        JOIN categories c ON m.category_id = c.id
+        WHERE m.id = %s
+    """, product_id)
+    product = cur.fetchone()
+    if product:
+        # Create message with product information
+        message =f"""
+        <b>🎁 Информация о товаре:</b>
+➖➖➖➖➖➖➖➖➖➖
+🏷 Название: <code>{product[0]}</code>
+🗃 Категория: <code>{product[8]}</code>
+💰 Стоимость: <code>{product[1]}₽</code>
+📦 Количество: <code>{product[2]}шт</code>
+📃 Описание: <b>{product[6]}</b>
+        """
+        # message = f"Название товара: {product[0]}\nЦена: {product[1]} руб.\nКоличество на складе: {product[2]}"
+        
+        # Create inline keyboard with download button and back button
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        keyboarditem1 = (telebot.types.InlineKeyboardButton(text="🏷 Изменить название ", callback_data=f"edit_name_{product_id}"))
+        keyboarditem2 = (telebot.types.InlineKeyboardButton(text="💰 Изменить цену ", callback_data=f"edit_price_{product_id}"))
+        keyboarditem3 = (telebot.types.InlineKeyboardButton(text="📦 Изменить количество ", callback_data=f"edit_quantity_{product_id}"))
+        keyboarditem4 = (telebot.types.InlineKeyboardButton(text="📃 Изменить описание ", callback_data=f"edit_opisanie_{product_id}"))
+        keyboarditem5 = (telebot.types.InlineKeyboardButton(text="🗂 Изменить файл ", callback_data=f"edit_file_{product_id}"))
+        keyboarditem6 = (telebot.types.InlineKeyboardButton(text="🖼 Изменить фото ", callback_data=f"edit_photo_{product_id}"))
+        keyboard.row(keyboarditem1, keyboarditem2)
+        keyboard.row(keyboarditem3, keyboarditem4)
+        keyboard.row(keyboarditem5, keyboarditem6)
+        chat_id = call.message.chat.id
+        bot.send_photo(chat_id,  product[7], caption=message, reply_markup=keyboard, parse_mode="HTML")
+
+    cur.close()
+    con.close()
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_file_"))
+def edit_product_file(call):
+    product_id = int(call.data.split("_")[2])
+    bot.send_message(call.message.chat.id, "Загрузите новый файл товара:")
+    bot.register_next_step_handler(call.message, handle_new_product_file, product_id)
+
+
+def handle_new_product_file(message, product_id):
+    new_file = message.document.file_id
+    new_file_name = message.document.file_name
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE market SET file_id = %s, file_name = %s WHERE id = %s", (new_file, new_file_name, product_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Файл товара успешно изменен")
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_photo_"))
+def edit_product_photo(call):
+    product_id = int(call.data.split("_")[2])
+    bot.send_message(call.message.chat.id, "Загрузите новое фото товара:")
+    bot.register_next_step_handler(call.message, handle_new_product_photo, product_id)
+
+
+def handle_new_product_photo(message, product_id):
+    new_photo = message.photo[-1].file_id
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE market SET photo = %s WHERE id = %s", (new_photo, product_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Фото товара успешно изменено")
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_opisanie_"))
+def edit_product_opisanie(call):
+    product_id = int(call.data.split("_")[2])
+    bot.send_message(call.message.chat.id, "Введите новое описание товара:")
+    bot.register_next_step_handler(call.message, handle_new_product_opisanie, product_id)
+
+
+def handle_new_product_opisanie(message, product_id):
+    new_opisanie = message.text
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE market SET opisanie = %s WHERE id = %s", (new_opisanie, product_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Описание товара успешно изменено")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_quantity_"))
+def edit_product_quantity(call):
+    product_id = int(call.data.split("_")[2])
+    # Отправьте сообщение с просьбой ввести новое название товара
+    bot.send_message(call.message.chat.id, "Введите новое колличество товара:")
+    bot.register_next_step_handler(call.message, handle_new_product_quantity, product_id)
+
+
+def handle_new_product_quantity(message, product_id):
+    new_quantity = message.text
+    # Обновите название товара в базе данных
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE market SET kolvo = %s WHERE id = %s", (new_quantity, product_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Колличество товара успешно изменено")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_price_"))
+def edit_product_price(call):
+    product_id = int(call.data.split("_")[2])
+    # Отправьте сообщение с просьбой ввести новое название товара
+    bot.send_message(call.message.chat.id, "Введите новую цену товара:")
+    bot.register_next_step_handler(call.message, handle_new_product_price, product_id)
+
+
+def handle_new_product_price(message, product_id):
+    new_price = message.text
+    # Обновите название товара в базе данных
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE market SET price = %s WHERE id = %s", (new_price, product_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Цена товара успешно изменена")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_name_"))
+def edit_product_name(call):
+    product_id = int(call.data.split("_")[2])
+    # Отправьте сообщение с просьбой ввести новое название товара
+    bot.send_message(call.message.chat.id, "Введите новое название товара:")
+    bot.register_next_step_handler(call.message, handle_new_product_name, product_id)
+
+
+def handle_new_product_name(message, product_id):
+    new_name = message.text
+    # Обновите название товара в базе данных
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE market SET name_tovar = %s WHERE id = %s", (new_name, product_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Название товара успешно изменено.")
+
+
 @bot.callback_query_handler(func=lambda call: call.data == 'find_check')
 def find_receipt_number(call):
     # Запрос ID пользователя
@@ -134,13 +357,73 @@ def handle_give_balance_amount(message, user_id):
 def send_profile(message):
     user_id = message.from_user.id
     data = core.user_profile(user_id)
+
     message_data = f"""
 <b>📇 | Мой профиль:</b>
 👤 | Мой ID:: <code>{data[1]}</code>
 💸 | Баланс: <code>{data[2]}₽</code>
 🛒 | Куплено товаров: <code>{data[3]}</code>
 """
-    bot.send_message(message.chat.id, text=message_data, parse_mode="HTML")
+
+    # Создание инлайн-клавиатуры для кнопок товаров
+    keyboard = telebot.types.InlineKeyboardMarkup()
+
+    # Добавление кнопки "Мои покупки" в инлайн-клавиатуру
+    my_purchases_button = telebot.types.InlineKeyboardButton(text="Мои покупки", callback_data="my_purchases")
+    keyboard.add(my_purchases_button)
+
+    # Отправка сообщения с профилем пользователя и инлайн-клавиатурой
+    bot.send_message(message.chat.id, text=message_data, parse_mode="HTML", reply_markup=keyboard)
+
+@bot.callback_query_handler(func=lambda call: call.data == "my_purchases")
+def handle_my_purchases_callback(call):
+    user_id = call.from_user.id
+    purchased_items = core.get_purchased_items(user_id)
+
+    if purchased_items:
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        for item in purchased_items:
+            keyboard.add(telebot.types.InlineKeyboardButton(text=item, callback_data=f"view_receipt_{item}"))
+
+        bot.send_message(call.message.chat.id, "Выберите товар для просмотра чека:", reply_markup=keyboard)
+    else:
+        bot.send_message(call.message.chat.id, "У вас нет совершенных покупок.")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("view_receipt_"))
+def handle_view_receipt_callback(call):
+    receipt_item = call.data.split("_")[2]  # Получаем имя товара из callback_data
+
+    user_id = call.from_user.id
+    receipt_info = core.get_receipt_info(user_id, receipt_item)
+
+    if receipt_info:
+        receipt_number = receipt_info[0]
+        user_id = receipt_info[1]
+        name_tovar = receipt_info[2]
+        price = receipt_info[3]
+        opisanie = receipt_info[4]
+        buy_date = receipt_info[5]
+        file_id = receipt_info[6]
+
+        # Отправка чека и файла пользователю
+        message_check = f"""
+        🧾 Чек: <code>{receipt_number}</code>
+➖➖➖➖➖➖➖➖➖➖
+👤 Покупатель: <b>{user_id}</b>
+🎁 Товар: <b>{name_tovar}</b>
+📦 Количество: <code>1 шт</code>
+💰 Стоимость: <code>{price}₽</code>
+📃 Описание: <b>{opisanie}</b>
+🕰 Дата покупки: <code>{str(buy_date)}</code>
+        """
+
+        bot.send_message(call.message.chat.id, text=message_check, parse_mode="HTML")
+
+        # Отправка файла товара
+        bot.send_document(call.message.chat.id, file_id, caption=name_tovar)
+    else:
+        bot.send_message(call.message.chat.id, "Чек не найден.")
+
 
 def delete_category(message):
     # Connect to the database
@@ -648,7 +931,7 @@ def send_text(message):
     elif message.text == '🗃 Удалить категорию ⛔️':
         delete_category(message)
     elif message.text == '🎁 Изменить товар 🖍':
-        delete_category(message)
+        edit_products(message)
     elif message.text == '🔙 Главное меню':
         admin(message)
     elif message.text == '👤 Мой профиль':
