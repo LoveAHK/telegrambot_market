@@ -15,7 +15,7 @@ from telebot.types import LabeledPrice
 
 bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
 
-def edit_products(message):
+def edit_categories(message):
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
     cur = con.cursor()
 
@@ -41,9 +41,54 @@ def edit_products(message):
     cur.close()
     con.close()
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("categoryedit_"))
+def edit_category(call):
+    category_id = int(call.data.split("_")[1])
+    bot.send_message(call.message.chat.id, "Введите новое название категории:")
+    bot.register_next_step_handler(call.message, handle_new_category_name, category_id)
+
+
+def handle_new_category_name(message, category_id):
+    new_name = message.text
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+    cur.execute("UPDATE categories SET name = %s WHERE id = %s", (new_name, category_id))
+    con.commit()
+    cur.close()
+    con.close()
+    bot.send_message(message.chat.id, "Название категории успешно изменено.")
+
+
+
+def edit_products(message):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+
+    # Get categories
+    cur.execute("SELECT id, name FROM categories")
+    categories = cur.fetchall()
+    messagetext1 = f"""
+        <b>🗃 Выберите Категорию:</b>
+➖➖➖➖➖➖➖➖➖➖
+    """
+    if categories:
+        # Create inline keyboard with categories
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        for category in categories:
+            keyboard.add(telebot.types.InlineKeyboardButton(text=category[1], callback_data=f"categoryeditproduct_{category[0]}"))
+
+        # Send message with categories
+        bot.send_message(message.chat.id, text=messagetext1, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        # If there are no categories, send error message
+        bot.send_message(message.chat.id, "К сожалению, нет категорий для отображения.")
+
+    cur.close()
+    con.close()
+
 
 # Callback function for category selection
-@bot.callback_query_handler(func=lambda call: call.data.startswith("categoryedit_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith("categoryeditproduct_"))
 def view_category_products_edit(call):
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
     cur = con.cursor()
@@ -65,7 +110,7 @@ def view_category_products_edit(call):
             keyboard.add(telebot.types.InlineKeyboardButton(text=product[1], callback_data=f"productedit_{product[0]}_{category_id}"))
 
         # Add "Назад" button to return to categories selection
-        keyboard.add(telebot.types.InlineKeyboardButton(text="Назад", callback_data="back_to_categories_edit"))
+        keyboard.add(telebot.types.InlineKeyboardButton(text="Назад", callback_data="back_to_categories_edit_product"))
 
         # Send message with products and store category id in callback data
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=messagetext, reply_markup=keyboard, parse_mode="HTML")
@@ -76,8 +121,8 @@ def view_category_products_edit(call):
     cur.close()
     con.close()
 
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_categories_edit")
-def back_to_categories_edit(call):
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_categories_edit_product")
+def back_to_categories_edit_product(call):
     edit_products(call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("productedit_"))
@@ -940,6 +985,8 @@ def send_text(message):
         popolnenie_balance(message)
     elif message.text == '🎁 Купить товары':
         view_products(message)
+    elif message.text == '🗃 Изменить категорию 🖍':
+        edit_categories(message)
     else:
         bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html', reply_markup=markup.markup_main())
 
