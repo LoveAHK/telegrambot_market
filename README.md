@@ -1,6 +1,6 @@
 # Телеграм Бот для Технической Поддержки
 ## Необходимые файлы
-![Screenshot_223]([https://github.com/LoveAHK/telegrambot_market/blob/master/Screenshot_223.png])
+![Screenshot_223]([https://yapx.ru/album/WHr9f])
 
 ## 2.1. Действия для загрузки программы
 
