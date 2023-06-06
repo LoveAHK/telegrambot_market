@@ -17,31 +17,35 @@ bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
 
 
 def edit_categories(message):
-    con = pymysql.connect(
-        host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
-    cur = con.cursor()
+    try:
+        con = pymysql.connect(
+            host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+        cur = con.cursor()
 
-    cur.execute("SELECT id, name FROM categories")
-    categories = cur.fetchall()
-    messagetext1 = f"""
-        <b>🗃 Выберите Категорию:</b>
-➖➖➖➖➖➖➖➖➖➖
-    """
-    if categories:
-        keyboard = telebot.types.InlineKeyboardMarkup()
-        for category in categories:
-            keyboard.add(telebot.types.InlineKeyboardButton(
-                text=category[1], callback_data=f"categoryedit_{category[0]}"))
+        cur.execute("SELECT id, name FROM categories")
+        categories = cur.fetchall()
+        messagetext1 = f"""
+            <b>🗃 Выберите Категорию:</b>
+    ➖➖➖➖➖➖➖➖➖➖
+        """
+        if categories:
+            keyboard = telebot.types.InlineKeyboardMarkup()
+            for category in categories:
+                keyboard.add(telebot.types.InlineKeyboardButton(
+                    text=category[1], callback_data=f"categoryedit_{category[0]}"))
 
-        bot.send_message(message.chat.id, text=messagetext1,
-                         reply_markup=keyboard, parse_mode="HTML")
-    else:
+            bot.send_message(message.chat.id, text=messagetext1,
+                            reply_markup=keyboard, parse_mode="HTML")
+        else:
 
+            bot.send_message(
+                message.chat.id, "К сожалению, нет категорий для отображения.")
+
+        cur.close()
+        con.close()
+    except:
         bot.send_message(
-            message.chat.id, "К сожалению, нет категорий для отображения.")
-
-    cur.close()
-    con.close()
+                message.chat.id, "К сожалению, что то пошло не так. Попробуйте еще раз")
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("categoryedit_"))

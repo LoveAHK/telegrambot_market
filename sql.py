@@ -1,6 +1,7 @@
 import config
 import pymysql
 
+print("Идет создание базы данных...")
 def create_table_check():
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
     cur = con.cursor()
